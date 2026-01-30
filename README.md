@@ -107,10 +107,12 @@ Bootstraps new Ubuntu servers with:
 - System updates
 
 ### update.yml
-Updates existing servers:
+Updates and cleans up existing servers:
 - System package updates
 - Security patches
-- Service restarts if needed
+- Full distro upgrades (Ubuntu version updates)
+- Removal of unused packages and configurations
+- Automatic package cache cleanup
 
 ## Testing
 

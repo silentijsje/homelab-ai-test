@@ -1,6 +1,9 @@
 ---
 # Global variables for all hosts
 
+# Default SSH user for all hosts
+ansible_user: stanley
+
 # Timezone
 timezone: "Europe/Amsterdam"
 

@@ -33,6 +33,25 @@
         msg: "Packages upgraded: {{ apt_upgrade.changed }}"
       tags: update
 
+    - name: Perform full distro upgrade
+      apt:
+        upgrade: full
+      register: distro_upgrade
+      tags: update,distro-upgrade
+
+    - name: Remove unused packages
+      apt:
+        autoremove: yes
+        autoclean: yes
+        purge: yes
+      register: package_removal
+      tags: update,cleanup
+
+    - name: Display package removal results
+      debug:
+        msg: "Unused packages removed: {{ package_removal.changed }}"
+      tags: update,cleanup
+
     - name: Check if reboot is required
       stat:
         path: /var/run/reboot-required

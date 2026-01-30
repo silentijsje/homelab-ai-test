@@ -224,7 +224,7 @@ ansible-playbook playbooks/bootstrap.yml --skip-tags security
 
 ### update.yml - Server Updates
 
-Applies system updates and security patches to existing servers.
+Applies system updates, security patches, and performs full distro upgrades with package cleanup on existing servers.
 
 ```yaml
 ---
@@ -241,34 +241,55 @@ Applies system updates and security patches to existing servers.
    - name: Update apt cache
      apt:
        update_cache: yes
-     changed_when: false             # Don't mark as changed
+       cache_valid_time: 3600        # Only update if cache older than 1 hour
    ```
 
 2. **Upgrade All Packages:**
    ```yaml
-   - name: Upgrade all packages
+   - name: Upgrade all packages to latest version
      apt:
        upgrade: dist                 # Distribution upgrade
-       update_cache: yes
        autoremove: yes               # Remove unused dependencies
        autoclean: yes                # Clean up downloaded packages
-     register: upgrade_result
+     register: apt_upgrade
    ```
 
-3. **Conditional Reboot:**
+3. **Full Distro Upgrade:**
+   ```yaml
+   - name: Perform full distro upgrade
+     apt:
+       upgrade: full                 # Complete distro upgrade (Ubuntu version updates)
+     register: distro_upgrade
+   ```
+   This handles major Ubuntu version upgrades and complex dependency changes.
+
+4. **Remove Unused Packages:**
+   ```yaml
+   - name: Remove unused packages
+     apt:
+       autoremove: yes               # Remove dependencies no longer needed
+       autoclean: yes                # Clean up downloaded package archives
+       purge: yes                    # Remove package configuration files
+     register: package_removal
+   ```
+   Cleans up orphaned packages, cached downloads, and configuration files to maintain system cleanliness.
+
+5. **Conditional Reboot:**
    ```yaml
    - name: Check if reboot is required
      stat:
        path: /var/run/reboot-required
-     register: reboot_required
+     register: reboot_required_file
 
-   - name: Reboot if required
+   - name: Reboot server if required
      reboot:
+       msg: "Reboot initiated by Ansible for system updates"
        reboot_timeout: 300           # Wait up to 5 minutes
        post_reboot_delay: 30         # Wait 30 seconds after reboot
+       test_command: uptime          # Verify system is up
      when:
-       - reboot_required.stat.exists
-       - reboot_after_updates | default(false)
+       - reboot_required_file.stat.exists
+       - reboot_after_updates | default(false) | bool
    ```
 
 **Usage:**
@@ -281,7 +302,20 @@ ansible-playbook playbooks/update.yml -e "reboot_after_updates=true"
 
 # Update specific server
 ansible-playbook playbooks/update.yml --limit docker01
+
+# Run only distro upgrade
+ansible-playbook playbooks/update.yml --tags distro-upgrade
+
+# Run only cleanup tasks
+ansible-playbook playbooks/update.yml --tags cleanup
 ```
+
+**Features:**
+- **Full distro upgrades:** Handles major Ubuntu version updates
+- **Package purging:** Removes unused packages and configuration files
+- **Automatic cleanup:** Cleans cached downloads automatically
+- **Safe reboots:** Only reboots when required and configured
+- **Detailed reporting:** Tracks what was changed during updates
 
 ## Roles
 

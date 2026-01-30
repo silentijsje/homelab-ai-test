@@ -1,24 +1,35 @@
 # Ubuntu Server Ansible Framework
 
-Ansible framework for bootstrapping and updating Ubuntu servers.
+Ansible framework for bootstrapping and updating Ubuntu servers in a homelab environment.
+
+## Documentation
+
+For detailed information about the framework, code explanations, and advanced usage, see [DOCUMENTATION.md](DOCUMENTATION.md).
+
+## Current Servers
+
+- **docker01.ota.lan** - Docker host server
 
 ## Structure
 
 ```
 .
-├── ansible.cfg           # Ansible configuration
-├── inventory/            # Inventory files
-│   └── hosts.yml        # Server inventory
-├── playbooks/           # Main playbooks
-│   ├── bootstrap.yml    # Bootstrap new servers
-│   └── update.yml       # Update existing servers
-├── roles/               # Ansible roles
-│   ├── common/         # Common configuration
-│   ├── security/       # Security hardening
-│   └── updates/        # System updates
-├── group_vars/          # Group variables
-│   └── all.yml         # Variables for all hosts
-└── host_vars/           # Host-specific variables
+├── ansible.cfg             # Ansible configuration
+├── README.md              # This file - Quick start guide
+├── DOCUMENTATION.md       # Detailed documentation and code explanations
+├── requirements.yml       # External dependencies
+├── inventory/             # Inventory files
+│   └── hosts.yml         # Server inventory
+├── playbooks/            # Main playbooks
+│   ├── bootstrap.yml     # Bootstrap new servers
+│   └── update.yml        # Update existing servers
+├── roles/                # Ansible roles
+│   ├── common/          # Common configuration
+│   ├── security/        # Security hardening
+│   └── updates/         # System updates
+├── group_vars/           # Group variables
+│   └── all.yml          # Variables for all hosts
+└── host_vars/            # Host-specific variables
 ```
 
 ## Prerequisites
@@ -29,7 +40,15 @@ Ansible framework for bootstrapping and updating Ubuntu servers.
 
 ## Quick Start
 
-### 1. Configure Inventory
+### 1. Install Dependencies
+
+Install required Ansible collections:
+
+```bash
+ansible-galaxy collection install -r requirements.yml
+```
+
+### 2. Configure Inventory
 
 Edit `inventory/hosts.yml` and add your servers:
 
@@ -57,7 +76,24 @@ ansible-playbook playbooks/bootstrap.yml
 ### 4. Update Existing Servers
 
 ```bash
+# Update all servers
 ansible-playbook playbooks/update.yml
+
+# Update specific server (e.g., docker01)
+ansible-playbook playbooks/update.yml --limit docker01
+
+# Update with automatic reboot if required
+ansible-playbook playbooks/update.yml -e "reboot_after_updates=true"
+```
+
+### 5. Test Connectivity
+
+```bash
+# Test connection to all servers
+ansible all -m ping
+
+# Test connection to docker01
+ansible docker01 -m ping
 ```
 
 ## Playbooks
@@ -71,10 +107,12 @@ Bootstraps new Ubuntu servers with:
 - System updates
 
 ### update.yml
-Updates existing servers:
+Updates and cleans up existing servers:
 - System package updates
 - Security patches
-- Service restarts if needed
+- Full distro upgrades (Ubuntu version updates)
+- Removal of unused packages and configurations
+- Automatic package cache cleanup
 
 ## Testing
 

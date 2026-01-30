@@ -43,8 +43,13 @@
       apt:
         autoremove: yes
         autoclean: yes
-        purge: yes
       register: package_removal
+      tags: update,cleanup
+
+    - name: Purge removed package configurations
+      command: apt-get autopurge -y
+      register: autopurge_result
+      changed_when: "'0 to remove' not in autopurge_result.stdout"
       tags: update,cleanup
 
     - name: Display package removal results

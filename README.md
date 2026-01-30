@@ -76,15 +76,14 @@ ansible-playbook playbooks/bootstrap.yml
 ### 4. Update Existing Servers
 
 ```bash
-# Update all servers
+# Update all servers (automatic reboot if required)
 ansible-playbook playbooks/update.yml
 
 # Update specific server (e.g., docker01)
 ansible-playbook playbooks/update.yml --limit docker01
-
-# Update with automatic reboot if required
-ansible-playbook playbooks/update.yml -e "reboot_after_updates=true"
 ```
+
+**Note:** Servers will automatically reboot if updates require it (kernel updates, etc.)
 
 ### 5. Test Connectivity
 

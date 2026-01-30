@@ -42,7 +42,7 @@ ufw_allowed_services:
 
 # System updates
 auto_updates_enabled: true
-reboot_after_updates: false
+reboot_after_updates: true  # Automatically reboot after updates if required
 
 # Users to create (optional)
 admin_users: []

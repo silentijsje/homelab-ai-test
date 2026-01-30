@@ -274,7 +274,7 @@ Applies system updates, security patches, and performs full distro upgrades with
    ```
    Cleans up orphaned packages, cached downloads, and configuration files to maintain system cleanliness.
 
-5. **Conditional Reboot:**
+5. **Automatic Reboot:**
    ```yaml
    - name: Check if reboot is required
      stat:
@@ -287,18 +287,14 @@ Applies system updates, security patches, and performs full distro upgrades with
        reboot_timeout: 300           # Wait up to 5 minutes
        post_reboot_delay: 30         # Wait 30 seconds after reboot
        test_command: uptime          # Verify system is up
-     when:
-       - reboot_required_file.stat.exists
-       - reboot_after_updates | default(false) | bool
+     when: reboot_required_file.stat.exists
    ```
+   The server will automatically reboot when the system indicates a reboot is required (kernel updates, etc.)
 
 **Usage:**
 ```bash
-# Update all servers (no reboot)
+# Update all servers (automatic reboot if required)
 ansible-playbook playbooks/update.yml
-
-# Update with automatic reboot
-ansible-playbook playbooks/update.yml -e "reboot_after_updates=true"
 
 # Update specific server
 ansible-playbook playbooks/update.yml --limit docker01
@@ -308,13 +304,16 @@ ansible-playbook playbooks/update.yml --tags distro-upgrade
 
 # Run only cleanup tasks
 ansible-playbook playbooks/update.yml --tags cleanup
+
+# Skip reboot (not recommended)
+ansible-playbook playbooks/update.yml --skip-tags update
 ```
 
 **Features:**
 - **Full distro upgrades:** Handles major Ubuntu version updates
 - **Package purging:** Removes unused packages and configuration files
 - **Automatic cleanup:** Cleans cached downloads automatically
-- **Safe reboots:** Only reboots when required and configured
+- **Automatic reboots:** Reboots server automatically when kernel or system updates require it
 - **Detailed reporting:** Tracks what was changed during updates
 
 ## Roles

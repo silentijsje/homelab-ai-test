@@ -1,0 +1,47 @@
+---
+# Global variables for all hosts
+
+# Timezone
+timezone: "Europe/Amsterdam"
+
+# System packages to install on all servers
+common_packages:
+  - vim
+  - htop
+  - curl
+  - wget
+  - git
+  - net-tools
+  - tree
+  - unzip
+  - software-properties-common
+  - apt-transport-https
+  - ca-certificates
+  - gnupg
+  - lsb-release
+
+# Security settings
+ssh_port: 22
+ssh_permit_root_login: "no"
+ssh_password_authentication: "no"
+ssh_pubkey_authentication: "yes"
+
+# Firewall settings
+ufw_enabled: true
+ufw_default_incoming: deny
+ufw_default_outgoing: allow
+
+# Allowed services through firewall
+ufw_allowed_services:
+  - ssh
+  - http
+  - https
+
+# System updates
+auto_updates_enabled: true
+reboot_after_updates: false
+
+# Users to create (optional)
+admin_users: []
+  # - username: admin
+  #   ssh_key: "ssh-rsa AAAAB3..."

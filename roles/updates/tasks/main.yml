@@ -1,0 +1,27 @@
+---
+# Updates role - System package updates
+
+- name: Update apt cache
+  apt:
+    update_cache: yes
+    cache_valid_time: 3600
+  tags: update
+
+- name: Upgrade all packages
+  apt:
+    upgrade: dist
+    autoremove: yes
+    autoclean: yes
+  register: upgrade_result
+  tags: update
+
+- name: Display upgrade results
+  debug:
+    msg: "System packages have been updated. Changed: {{ upgrade_result.changed }}"
+  tags: update
+
+- name: Clean up package cache
+  apt:
+    autoclean: yes
+    autoremove: yes
+  tags: cleanup

@@ -1,0 +1,56 @@
+---
+# Common role - Basic system configuration
+
+- name: Set timezone
+  timezone:
+    name: "{{ timezone }}"
+  tags: timezone
+
+- name: Install common packages
+  apt:
+    name: "{{ common_packages }}"
+    state: present
+    update_cache: yes
+  tags: packages
+
+- name: Ensure locale is generated
+  locale_gen:
+    name: en_US.UTF-8
+    state: present
+  tags: locale
+
+- name: Set hostname
+  hostname:
+    name: "{{ inventory_hostname }}"
+  when: inventory_hostname != ansible_hostname
+  tags: hostname
+
+- name: Update /etc/hosts with hostname
+  lineinfile:
+    path: /etc/hosts
+    regexp: '^127\.0\.1\.1'
+    line: "127.0.1.1 {{ inventory_hostname }}"
+    state: present
+  tags: hostname
+
+- name: Configure systemd journald
+  lineinfile:
+    path: /etc/systemd/journald.conf
+    regexp: "{{ item.regexp }}"
+    line: "{{ item.line }}"
+    state: present
+  loop:
+    - { regexp: '^#?SystemMaxUse=', line: 'SystemMaxUse=500M' }
+    - { regexp: '^#?SystemMaxFileSize=', line: 'SystemMaxFileSize=100M' }
+  notify: restart journald
+  tags: logging
+
+- name: Disable unnecessary services
+  systemd:
+    name: "{{ item }}"
+    enabled: no
+    state: stopped
+  loop:
+    - snapd.service
+  ignore_errors: yes
+  tags: services

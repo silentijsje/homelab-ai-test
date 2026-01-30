@@ -1,0 +1,7 @@
+---
+# Handlers for common role
+
+- name: restart journald
+  systemd:
+    name: systemd-journald
+    state: restarted

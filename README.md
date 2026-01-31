@@ -22,13 +22,17 @@ For detailed information about the framework, code explanations, and advanced us
 │   └── hosts.yml         # Server inventory
 ├── playbooks/            # Main playbooks
 │   ├── bootstrap.yml     # Bootstrap new servers
-│   └── update.yml        # Update existing servers
+│   ├── update.yml        # Update existing servers
+│   └── smb-shares.yml    # Configure SMB shares
 ├── roles/                # Ansible roles
 │   ├── common/          # Common configuration
 │   ├── security/        # Security hardening
-│   └── updates/         # System updates
+│   ├── updates/         # System updates
+│   └── smb_share/       # SMB share configuration
 ├── group_vars/           # Group variables
-│   └── all.yml          # Variables for all hosts
+│   └── all/             # Variables for all hosts
+│       ├── vars.yml     # Public variables
+│       └── vault.yml    # Encrypted secrets (ansible-vault)
 └── host_vars/            # Host-specific variables
 ```
 
@@ -65,7 +69,12 @@ all:
 
 ### 2. Configure Variables
 
-Edit `group_vars/all.yml` to set your preferences.
+Edit `group_vars/all/vars.yml` to set your preferences.
+
+For secrets (passwords, API keys), edit the encrypted vault:
+```bash
+ansible-vault edit group_vars/all/vault.yml
+```
 
 ### 3. Bootstrap New Servers
 
@@ -113,6 +122,22 @@ Updates and cleans up existing servers:
 - Removal of unused packages and configurations
 - Automatic package cache cleanup
 
+### smb-shares.yml
+Configures SMB (Samba) file shares:
+- Creates users and groups with specified UID/GID
+- Recreates users if UID/GID mismatch detected
+- Creates share directories with proper permissions
+- Deploys Samba configuration
+- Opens firewall for Samba
+
+```bash
+# Configure SMB shares (requires vault password)
+ansible-playbook playbooks/smb-shares.yml --ask-vault-pass
+
+# Configure on specific server
+ansible-playbook playbooks/smb-shares.yml --limit docker01 --ask-vault-pass
+```
+
 ## Testing
 
 Test connectivity to all servers:
@@ -125,12 +150,33 @@ Run in check mode (dry-run):
 ansible-playbook playbooks/bootstrap.yml --check
 ```
 
+## SMB Share Configuration
+
+Define shares in `group_vars/all/vars.yml`:
+```yaml
+smb_shares:
+  - name: "documents"
+    path: "/srv/samba/documents"
+    user: "smbdocs"
+    group: "smbdocs"
+    uid: 2001
+    gid: 2001
+    permission: "rw"  # or "ro" for read-only
+```
+
+Add passwords in `group_vars/all/vault.yml` (encrypted):
+```yaml
+vault_smb_passwords:
+  documents: "YourSecurePassword"
+```
+
 ## Security
 
 - SSH key-based authentication recommended
 - Disable password authentication
 - Configure firewall rules
 - Regular security updates
+- Secrets stored in encrypted Ansible Vault
 
 ## Author
 

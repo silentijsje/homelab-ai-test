@@ -32,11 +32,13 @@ homelab-ai-test/
 ├── requirements.yml         # External dependencies (collections/roles)
 ├── README.md               # Quick start guide
 ├── DOCUMENTATION.md        # This file - detailed documentation
+├── .vault-password-hint    # Vault usage instructions
 ├── inventory/              # Server inventory definitions
 │   └── hosts.yml          # YAML inventory file
 ├── playbooks/             # Executable playbooks
 │   ├── bootstrap.yml      # Initial server setup
-│   └── update.yml         # Server update operations
+│   ├── update.yml         # Server update operations
+│   └── smb-shares.yml     # SMB share configuration
 ├── roles/                 # Reusable role definitions
 │   ├── common/           # Basic system configuration
 │   │   ├── tasks/        # Task definitions
@@ -51,11 +53,22 @@ homelab-ai-test/
 │   │   └── templates/    # Configuration templates
 │   │       ├── jail.local.j2
 │   │       └── 50unattended-upgrades.j2
-│   └── updates/          # System updates
-│       └── tasks/
+│   ├── updates/          # System updates
+│   │   └── tasks/
+│   │       └── main.yml
+│   └── smb_share/        # SMB share configuration
+│       ├── tasks/
+│       │   └── main.yml
+│       ├── handlers/
+│       │   └── main.yml
+│       ├── templates/
+│       │   └── smb.conf.j2
+│       └── defaults/
 │           └── main.yml
 ├── group_vars/           # Group-level variables
-│   └── all.yml          # Variables for all hosts
+│   └── all/             # Variables for all hosts
+│       ├── vars.yml     # Public variables
+│       └── vault.yml    # Encrypted secrets (ansible-vault)
 └── host_vars/            # Host-specific variables (optional)
 ```
 
@@ -316,6 +329,76 @@ ansible-playbook playbooks/update.yml --skip-tags update
 - **Automatic reboots:** Reboots server automatically when kernel or system updates require it
 - **Detailed reporting:** Tracks what was changed during updates
 
+### smb-shares.yml - SMB Share Configuration
+
+Configures Samba file shares with user/group management.
+
+```yaml
+---
+- name: Configure SMB Shares
+  hosts: all
+  become: yes
+  gather_facts: yes
+```
+
+**Features:**
+
+1. **User/Group Management:**
+   - Creates users and groups with specified UID/GID
+   - Automatically recreates users if UID doesn't match
+   - Automatically recreates groups if GID doesn't match
+   - Sets Samba passwords from encrypted vault
+
+2. **Share Configuration:**
+   - Creates share directories with proper ownership
+   - Deploys templated smb.conf
+   - Supports read-write and read-only permissions
+   - Configurable access controls (hosts_allow, hosts_deny)
+
+3. **Security:**
+   - Passwords stored in encrypted vault
+   - Firewall automatically configured for Samba
+
+**Usage:**
+```bash
+# Configure all SMB shares (requires vault password)
+ansible-playbook playbooks/smb-shares.yml --ask-vault-pass
+
+# Configure specific server
+ansible-playbook playbooks/smb-shares.yml --limit docker01 --ask-vault-pass
+
+# Use vault password file
+ansible-playbook playbooks/smb-shares.yml --vault-password-file ~/.vault_pass
+
+# Dry run
+ansible-playbook playbooks/smb-shares.yml --ask-vault-pass --check
+```
+
+**Configuration Example:**
+
+In `group_vars/all/vars.yml`:
+```yaml
+smb_shares:
+  - name: "documents"           # Share name (used as section in smb.conf)
+    path: "/srv/samba/documents" # Directory path
+    user: "smbdocs"             # Owner username
+    group: "smbdocs"            # Owner group
+    uid: 2001                   # User ID
+    gid: 2001                   # Group ID
+    permission: "rw"            # "rw" or "ro"
+    comment: "Shared Documents" # Optional description
+    browseable: "yes"           # Optional (default: yes)
+    guest_ok: "no"              # Optional (default: no)
+    hosts_allow:                # Optional IP restrictions
+      - "192.168.1.0/24"
+```
+
+In `group_vars/all/vault.yml` (encrypted):
+```yaml
+vault_smb_passwords:
+  documents: "SecurePassword123!"
+```
+
 ## Roles
 
 ### Common Role
@@ -568,11 +651,174 @@ Manages system package updates.
   tags: ['updates', 'cleanup']
 ```
 
+### SMB Share Role
+
+Manages Samba file share configuration with automatic user/group management.
+
+**Tasks (roles/smb_share/tasks/main.yml):**
+
+1. **Package Installation:**
+   ```yaml
+   - name: Install Samba packages
+     apt:
+       name:
+         - samba
+         - samba-common
+         - samba-common-bin
+       state: present
+   ```
+
+2. **User/Group Validation:**
+   ```yaml
+   - name: Check if SMB users exist and get their current UID
+     getent:
+       database: passwd
+       key: "{{ item.user }}"
+       fail_key: false
+     loop: "{{ smb_shares }}"
+     register: smb_users_check
+   ```
+
+3. **UID/GID Mismatch Handling:**
+   ```yaml
+   - name: Delete users with mismatched UID
+     user:
+       name: "{{ item.item.user }}"
+       state: absent
+       force: yes
+     loop: "{{ smb_users_check.results }}"
+     when:
+       - item.ansible_facts.getent_passwd[item.item.user][1] | int != item.item.uid | int
+   ```
+   If a user exists but with a different UID than specified, the user is deleted and recreated with the correct UID.
+
+4. **User/Group Creation:**
+   ```yaml
+   - name: Create SMB groups
+     group:
+       name: "{{ item.group }}"
+       gid: "{{ item.gid }}"
+       state: present
+     loop: "{{ smb_shares }}"
+
+   - name: Create SMB users
+     user:
+       name: "{{ item.user }}"
+       uid: "{{ item.uid }}"
+       group: "{{ item.group }}"
+       shell: /usr/sbin/nologin
+       create_home: no
+     loop: "{{ smb_shares }}"
+   ```
+
+5. **Samba Password Configuration:**
+   ```yaml
+   - name: Set Samba password for users
+     shell: |
+       (echo "{{ vault_smb_passwords[item.name] }}"; echo "{{ vault_smb_passwords[item.name] }}") | smbpasswd -s -a {{ item.user }}
+     loop: "{{ smb_shares }}"
+     when: vault_smb_passwords[item.name] is defined
+     no_log: true  # Hide password from logs
+   ```
+   Passwords are retrieved from the encrypted vault using the share name as key.
+
+6. **Directory Creation:**
+   ```yaml
+   - name: Create share directories
+     file:
+       path: "{{ item.path }}"
+       state: directory
+       owner: "{{ item.user }}"
+       group: "{{ item.group }}"
+       mode: "{{ item.directory_mode | default('0755') }}"
+     loop: "{{ smb_shares }}"
+   ```
+
+7. **Samba Configuration:**
+   ```yaml
+   - name: Deploy Samba configuration
+     template:
+       src: smb.conf.j2
+       dest: /etc/samba/smb.conf
+       validate: 'testparm -s %s'
+     notify: restart smbd
+   ```
+
+**Template (roles/smb_share/templates/smb.conf.j2):**
+```jinja
+[global]
+   workgroup = {{ smb_workgroup | default('WORKGROUP') }}
+   server string = {{ smb_server_string | default('Samba Server %h') }}
+   security = user
+   passdb backend = tdbsam
+
+{% for share in smb_shares %}
+[{{ share.name }}]
+   path = {{ share.path }}
+   read only = {{ 'no' if share.permission == 'rw' else 'yes' }}
+   valid users = {{ share.user }}
+   force user = {{ share.user }}
+   force group = {{ share.group }}
+{% endfor %}
+```
+
+**Handlers (roles/smb_share/handlers/main.yml):**
+```yaml
+- name: restart smbd
+  service:
+    name: smbd
+    state: restarted
+```
+
+**Variables:**
+
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `smb_workgroup` | Windows workgroup name | `WORKGROUP` |
+| `smb_server_string` | Server description | `Samba Server %h` |
+| `smb_shares` | List of share definitions | `[]` |
+| `vault_smb_passwords` | Dict of passwords (encrypted) | `{}` |
+
+**Share Definition Fields:**
+
+| Field | Required | Description |
+|-------|----------|-------------|
+| `name` | Yes | Share name (SMB share identifier) |
+| `path` | Yes | Directory path on server |
+| `user` | Yes | Owner username |
+| `group` | Yes | Owner group |
+| `uid` | Yes | User ID |
+| `gid` | Yes | Group ID |
+| `permission` | Yes | `rw` or `ro` |
+| `comment` | No | Share description |
+| `browseable` | No | Show in network browser (default: yes) |
+| `guest_ok` | No | Allow guest access (default: no) |
+| `hosts_allow` | No | List of allowed hosts/networks |
+| `hosts_deny` | No | List of denied hosts/networks |
+| `create_mask` | No | File creation mask (default: 0664) |
+| `directory_mask` | No | Directory creation mask (default: 0775) |
+
 ## Variables
 
-### group_vars/all.yml
+### Variable File Structure
 
-Central configuration for all servers.
+Variables are split into public and secret files:
+
+```
+group_vars/
+└── all/
+    ├── vars.yml      # Public configuration (not encrypted)
+    └── vault.yml     # Secrets (encrypted with ansible-vault)
+```
+
+**Why Split?**
+- `vars.yml` can be committed to version control safely
+- `vault.yml` contains sensitive data and is encrypted
+- Ansible automatically loads all YAML files in the directory
+
+### group_vars/all/vars.yml
+
+Central public configuration for all servers.
 
 ```yaml
 ---
@@ -633,7 +879,65 @@ admin_users: []                      # List of admin users to create
 1. Command line: `-e "var=value"`
 2. Host vars: `host_vars/docker01.yml`
 3. Group vars: `group_vars/ubuntu_servers.yml`
-4. Group vars: `group_vars/all.yml`
+4. Group vars: `group_vars/all/vars.yml` and `group_vars/all/vault.yml`
+
+### group_vars/all/vault.yml (Encrypted)
+
+Stores sensitive information encrypted with ansible-vault.
+
+```yaml
+---
+# SMB Share Passwords (key = share name from smb_shares)
+vault_smb_passwords:
+  documents: "SecurePassword123!"
+  media: "MediaPass456!"
+
+# Admin SSH keys (if needed)
+vault_admin_ssh_keys:
+  admin: "ssh-rsa AAAAB3..."
+
+# Other secrets
+# vault_api_keys: {}
+# vault_database_passwords: {}
+```
+
+**Managing the Vault:**
+
+```bash
+# Edit encrypted vault (opens in $EDITOR)
+ansible-vault edit group_vars/all/vault.yml
+
+# View vault contents
+ansible-vault view group_vars/all/vault.yml
+
+# Re-encrypt with new password
+ansible-vault rekey group_vars/all/vault.yml
+
+# Encrypt a plain text file
+ansible-vault encrypt group_vars/all/vault.yml
+
+# Decrypt to plain text (not recommended)
+ansible-vault decrypt group_vars/all/vault.yml
+```
+
+**Using Vault with Playbooks:**
+
+```bash
+# Prompt for password
+ansible-playbook playbooks/smb-shares.yml --ask-vault-pass
+
+# Use password file
+ansible-playbook playbooks/smb-shares.yml --vault-password-file ~/.vault_pass
+
+# Use environment variable
+ANSIBLE_VAULT_PASSWORD_FILE=~/.vault_pass ansible-playbook playbooks/smb-shares.yml
+```
+
+**Best Practices:**
+- Never commit the vault password to version control
+- Use a password manager to store the vault password
+- Consider using `--vault-id` for multiple vaults
+- Rotate vault password periodically
 
 ## Usage Examples
 

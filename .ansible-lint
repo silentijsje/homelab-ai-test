@@ -23,7 +23,9 @@ exclude_paths:
 skip_list:
   - yaml[line-length]
   - name[missing]
+  - name[casing]  # Allow lowercase handler names (e.g., "restart sshd")
   - fqcn[action-core]  # Allow short module names (apt vs ansible.builtin.apt)
+  - fqcn[action]  # Allow short collection module names (ufw vs community.general.ufw)
   - var-naming[no-role-prefix]  # Allow variables without role prefix
   - command-instead-of-module  # Allow shell commands when needed
   - args[module]  # Mock modules don't have full argument specs

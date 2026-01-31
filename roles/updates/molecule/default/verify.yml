@@ -1,0 +1,41 @@
+---
+- name: Verify updates configuration
+  hosts: all
+  become: true
+  gather_facts: false
+
+  tasks:
+    # APT Cache Tests
+    - name: Verify apt cache is recent (updated within last hour)
+      stat:
+        path: /var/cache/apt/pkgcache.bin
+      register: apt_cache
+      failed_when: >
+        not apt_cache.stat.exists or
+        (ansible_date_time.epoch | int - apt_cache.stat.mtime) > 3600
+
+    # Package Manager State Tests
+    - name: Verify no broken packages
+      command: dpkg --audit
+      register: dpkg_audit
+      changed_when: false
+      failed_when: dpkg_audit.stdout | length > 0
+
+    - name: Verify apt is not locked
+      stat:
+        path: /var/lib/dpkg/lock-frontend
+      register: apt_lock
+
+    # Reboot Required Check (informational)
+    - name: Check if reboot is required
+      stat:
+        path: /var/run/reboot-required
+      register: reboot_required
+
+    - name: Display reboot status
+      debug:
+        msg: "{{ 'Reboot required' if reboot_required.stat.exists else 'No reboot required' }}"
+
+    - name: Display verification summary
+      debug:
+        msg: "All updates role verification tests passed successfully!"

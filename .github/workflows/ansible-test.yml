@@ -36,7 +36,7 @@ jobs:
         run: yamllint .
 
       - name: Run ansible-lint
-        run: ansible-lint --offline
+        run: ansible-lint
 
   molecule-common:
     name: Molecule - common role

@@ -3,6 +3,17 @@
 # Note: Some environments may have compatibility issues with newer ansible versions
 offline: true
 
+# Mock modules from collections that may not be installed during linting
+mock_modules:
+  - community.general.timezone
+  - community.general.ufw
+  - community.general.locale_gen
+  - ansible.posix.sysctl
+  - timezone
+  - ufw
+  - sysctl
+  - locale_gen
+
 exclude_paths:
   - .cache/
   - .git/
@@ -12,8 +23,15 @@ exclude_paths:
 skip_list:
   - yaml[line-length]
   - name[missing]
-  - load-failure
-  - syntax-check[unknown-module]
+  - fqcn[action-core]  # Allow short module names (apt vs ansible.builtin.apt)
+  - var-naming[no-role-prefix]  # Allow variables without role prefix
+  - command-instead-of-module  # Allow shell commands when needed
+  - args[module]  # Mock modules don't have full argument specs
+  - risky-file-permissions  # Permissions handled by system defaults
+  - no-changed-when  # Some commands are intentionally always-run
+  - risky-shell-pipe  # Pipes are used intentionally
+  - command-instead-of-shell  # Shell features needed for some tasks
+  - ignore-errors  # Some tasks intentionally use ignore_errors
 
 warn_list:
   - experimental

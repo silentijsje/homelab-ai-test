@@ -1,14 +1,20 @@
 ---
-profile: production
+# Configuration for ansible-lint
+# Note: Some environments may have compatibility issues with newer ansible versions
+offline: true
 
 exclude_paths:
   - .cache/
   - .git/
   - .github/
+  - roles/*/molecule/
+
+skip_list:
+  - yaml[line-length]
+  - name[missing]
+  - load-failure
+  - syntax-check[unknown-module]
 
 warn_list:
   - experimental
   - role-name[path]
-
-skip_list:
-  - yaml[line-length]

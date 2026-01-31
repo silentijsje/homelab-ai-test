@@ -27,7 +27,7 @@ jobs:
       - name: Install dependencies
         run: |
           pip install --upgrade pip
-          pip install 'ansible>=2.16,<2.19' 'ansible-lint>=6.22,<7' yamllint
+          pip install 'ansible-core>=2.16,<2.19' 'ansible-lint>=6.22,<7' yamllint
 
       - name: Install Ansible collections
         run: ansible-galaxy collection install -r requirements.yml

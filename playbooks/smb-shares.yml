@@ -1,0 +1,48 @@
+---
+# SMB Shares Playbook
+# Creates and configures SMB shares from the smb_shares variable list
+#
+# Usage:
+#   ansible-playbook playbooks/smb-shares.yml
+#   ansible-playbook playbooks/smb-shares.yml --tags smb
+#   ansible-playbook playbooks/smb-shares.yml --limit docker01.ota.lan
+
+- name: Configure SMB Shares
+  hosts: all
+  become: yes
+  gather_facts: yes
+
+  pre_tasks:
+    - name: Display target host information
+      debug:
+        msg: "Configuring SMB shares on {{ inventory_hostname }}"
+      tags: always
+
+    - name: Check if smb_shares is defined
+      fail:
+        msg: "No SMB shares defined. Please define smb_shares variable."
+      when: smb_shares is not defined or smb_shares | length == 0
+      tags: always
+
+    - name: Display shares to be configured
+      debug:
+        msg: "Will configure share: {{ item.name }} at {{ item.path }} for user {{ item.user }}:{{ item.group }} ({{ item.permission }})"
+      loop: "{{ smb_shares }}"
+      tags: always
+
+  roles:
+    - role: smb_share
+      tags: smb
+
+  post_tasks:
+    - name: Verify Samba service is running
+      service:
+        name: smbd
+        state: started
+      register: smbd_status
+      tags: always
+
+    - name: Display completion message
+      debug:
+        msg: "SMB share configuration complete on {{ inventory_hostname }}. Samba service is {{ smbd_status.state }}."
+      tags: always

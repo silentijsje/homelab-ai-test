@@ -1,0 +1,11 @@
+---
+# SMB Share Role - Default Variables
+# These can be overridden in group_vars or host_vars
+
+smb_workgroup: "WORKGROUP"
+smb_server_string: "Samba Server %h"
+smb_map_to_guest: "never"
+smb_shares: []
+
+# Passwords are stored in vault - keyed by share name
+vault_smb_passwords: {}

@@ -1,0 +1,49 @@
+# Samba configuration - Managed by Ansible
+# Do not edit manually
+
+[global]
+   workgroup = {{ smb_workgroup | default('WORKGROUP') }}
+   server string = {{ smb_server_string | default('Samba Server %h') }}
+   server role = standalone server
+
+   # Logging
+   log file = /var/log/samba/log.%m
+   max log size = 1000
+   logging = file
+
+   # Authentication
+   security = user
+   passdb backend = tdbsam
+   map to guest = {{ smb_map_to_guest | default('never') }}
+
+   # Performance tuning
+   socket options = TCP_NODELAY IPTOS_LOWDELAY
+
+   # Disable printer support
+   load printers = no
+   printing = bsd
+   printcap name = /dev/null
+   disable spoolss = yes
+
+{% for share in smb_shares %}
+[{{ share.name }}]
+   path = {{ share.path }}
+   comment = {{ share.comment | default(share.name + ' Share') }}
+   browseable = {{ share.browseable | default('yes') }}
+   read only = {{ 'no' if share.permission == 'rw' else 'yes' }}
+   writable = {{ 'yes' if share.permission == 'rw' else 'no' }}
+   guest ok = {{ share.guest_ok | default('no') }}
+   valid users = {{ share.valid_users | default(share.user) }}
+   write list = {{ share.write_list | default(share.user) if share.permission == 'rw' else '' }}
+   force user = {{ share.user }}
+   force group = {{ share.group }}
+   create mask = {{ share.create_mask | default('0664') }}
+   directory mask = {{ share.directory_mask | default('0775') }}
+{% if share.hosts_allow is defined %}
+   hosts allow = {{ share.hosts_allow | join(' ') }}
+{% endif %}
+{% if share.hosts_deny is defined %}
+   hosts deny = {{ share.hosts_deny | join(' ') }}
+{% endif %}
+
+{% endfor %}

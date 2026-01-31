@@ -1,0 +1,137 @@
+---
+# SMB Share Role - Main Tasks
+
+- name: Install Samba packages
+  apt:
+    name:
+      - samba
+      - samba-common
+      - samba-common-bin
+    state: present
+    update_cache: yes
+  tags: smb
+
+- name: Ensure Samba service is enabled
+  service:
+    name: smbd
+    enabled: yes
+  tags: smb
+
+# User and Group Management
+- name: Check if SMB users exist and get their current UID
+  getent:
+    database: passwd
+    key: "{{ item.user }}"
+    fail_key: false
+  loop: "{{ smb_shares }}"
+  register: smb_users_check
+  tags: smb
+
+- name: Check if SMB groups exist and get their current GID
+  getent:
+    database: group
+    key: "{{ item.group }}"
+    fail_key: false
+  loop: "{{ smb_shares }}"
+  register: smb_groups_check
+  tags: smb
+
+- name: Kill processes for users with mismatched UID before deletion
+  shell: "pkill -9 -u {{ item.item.user }} || true"
+  loop: "{{ smb_users_check.results }}"
+  when:
+    - item.ansible_facts.getent_passwd is defined
+    - item.ansible_facts.getent_passwd[item.item.user] is not none
+    - item.ansible_facts.getent_passwd[item.item.user][1] | int != item.item.uid | int
+  tags: smb
+
+- name: Delete users with mismatched UID
+  user:
+    name: "{{ item.item.user }}"
+    state: absent
+    remove: no
+    force: yes
+  loop: "{{ smb_users_check.results }}"
+  when:
+    - item.ansible_facts.getent_passwd is defined
+    - item.ansible_facts.getent_passwd[item.item.user] is not none
+    - item.ansible_facts.getent_passwd[item.item.user][1] | int != item.item.uid | int
+  tags: smb
+
+- name: Delete groups with mismatched GID
+  group:
+    name: "{{ item.item.group }}"
+    state: absent
+  loop: "{{ smb_groups_check.results }}"
+  when:
+    - item.ansible_facts.getent_group is defined
+    - item.ansible_facts.getent_group[item.item.group] is not none
+    - item.ansible_facts.getent_group[item.item.group][1] | int != item.item.gid | int
+  tags: smb
+
+- name: Create SMB groups
+  group:
+    name: "{{ item.group }}"
+    gid: "{{ item.gid }}"
+    state: present
+  loop: "{{ smb_shares }}"
+  tags: smb
+
+- name: Create SMB users
+  user:
+    name: "{{ item.user }}"
+    uid: "{{ item.uid }}"
+    group: "{{ item.group }}"
+    shell: /usr/sbin/nologin
+    create_home: no
+    system: no
+    state: present
+  loop: "{{ smb_shares }}"
+  tags: smb
+
+- name: Set Samba password for users
+  shell: |
+    (echo "{{ vault_smb_passwords[item.name] }}"; echo "{{ vault_smb_passwords[item.name] }}") | smbpasswd -s -a {{ item.user }}
+  loop: "{{ smb_shares }}"
+  when: vault_smb_passwords[item.name] is defined
+  no_log: true
+  changed_when: false
+  tags: smb
+
+- name: Enable Samba users
+  shell: smbpasswd -e {{ item.user }}
+  loop: "{{ smb_shares }}"
+  when: vault_smb_passwords[item.name] is defined
+  changed_when: false
+  tags: smb
+
+# Share Directory Management
+- name: Create share directories
+  file:
+    path: "{{ item.path }}"
+    state: directory
+    owner: "{{ item.user }}"
+    group: "{{ item.group }}"
+    mode: "{{ item.directory_mode | default('0755') }}"
+  loop: "{{ smb_shares }}"
+  tags: smb
+
+# Samba Configuration
+- name: Deploy Samba configuration
+  template:
+    src: smb.conf.j2
+    dest: /etc/samba/smb.conf
+    owner: root
+    group: root
+    mode: '0644'
+    validate: 'testparm -s %s'
+  notify: restart smbd
+  tags: smb
+
+# Firewall Configuration
+- name: Allow Samba through UFW
+  ufw:
+    rule: allow
+    name: Samba
+  when: ufw_enabled | default(true)
+  tags: smb

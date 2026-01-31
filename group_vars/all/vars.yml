@@ -1,0 +1,90 @@
+---
+# Global variables for all hosts
+# Public configuration - NO SECRETS HERE
+
+# Default SSH user for all hosts
+ansible_user: stanley
+
+# Timezone
+timezone: "Europe/Amsterdam"
+
+# System packages to install on all servers
+common_packages:
+  - vim
+  - htop
+  - curl
+  - wget
+  - git
+  - net-tools
+  - tree
+  - unzip
+  - software-properties-common
+  - apt-transport-https
+  - ca-certificates
+  - gnupg
+  - lsb-release
+
+# Security settings
+ssh_port: 22
+ssh_permit_root_login: "no"
+ssh_password_authentication: "no"
+ssh_pubkey_authentication: "yes"
+
+# Firewall settings
+ufw_enabled: true
+ufw_default_incoming: deny
+ufw_default_outgoing: allow
+
+# Allowed services through firewall
+ufw_allowed_services:
+  - ssh
+  - http
+  - https
+
+# System updates
+auto_updates_enabled: true
+reboot_after_updates: true
+
+# Users to create (optional)
+# Note: SSH keys should be stored in vault.yml
+admin_users: []
+
+# SMB Share Configuration
+smb_workgroup: "WORKGROUP"
+smb_server_string: "Samba Server %h"
+smb_map_to_guest: "never"
+
+# SMB Shares - Define your shares here
+# Note: smb_password is stored in vault.yml and merged automatically
+#
+# Required fields:
+#   - name: Share name (visible to clients)
+#   - path: Directory path on the server
+#   - user: Owner username
+#   - group: Owner group
+#   - uid: User ID (if user exists with different UID, it will be recreated)
+#   - gid: Group ID (if group exists with different GID, it will be recreated)
+#   - permission: 'rw' for read-write or 'ro' for read-only
+#
+# Optional fields:
+#   - comment: Description of the share
+#   - browseable: 'yes' or 'no' (default: 'yes')
+#   - guest_ok: 'yes' or 'no' (default: 'no')
+#   - valid_users: Space-separated list of users (default: owner user)
+#   - write_list: Space-separated list of users with write access (for rw shares)
+#   - create_mask: File creation mask (default: '0664')
+#   - directory_mask: Directory creation mask (default: '0775')
+#   - directory_mode: Permissions for share directory (default: '0755')
+#   - hosts_allow: List of allowed hosts/networks
+#   - hosts_deny: List of denied hosts/networks
+
+smb_shares: []
+  # Example share configuration (passwords in vault.yml):
+  # - name: "documents"
+  #   path: "/srv/samba/documents"
+  #   user: "smbdocs"
+  #   group: "smbdocs"
+  #   uid: 2001
+  #   gid: 2001
+  #   permission: "rw"
+  #   comment: "Shared Documents"

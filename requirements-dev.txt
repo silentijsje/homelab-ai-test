@@ -1,6 +1,7 @@
 # Development and testing dependencies
 # ansible 9.x = ansible-core 2.16.x, ansible 10.x = ansible-core 2.17.x
-ansible-core>=2.16.0,<2.19.0
+# Note: ansible-lint 6.x requires ansible-core <2.18
+ansible-core>=2.16.0,<2.18.0
 ansible-lint>=6.22.0,<7.0.0
 yamllint>=1.33.0
 molecule>=6.0.0

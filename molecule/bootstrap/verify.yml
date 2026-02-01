@@ -1,0 +1,128 @@
+---
+# Verification for bootstrap playbook integration test
+# Ensures all three roles (common, security, updates) work together correctly
+- name: Verify Bootstrap Integration
+  hosts: all
+  become: true
+  gather_facts: true
+
+  tasks:
+    # ============================================
+    # COMMON ROLE VERIFICATION
+    # ============================================
+    - name: Verify timezone is set correctly
+      command: cat /etc/timezone
+      register: timezone_check
+      changed_when: false
+      failed_when: "'Europe/Amsterdam' not in timezone_check.stdout"
+
+    - name: Verify common packages are installed
+      package:
+        name: "{{ item }}"
+        state: present
+      check_mode: yes
+      register: common_pkg
+      failed_when: common_pkg.changed
+      loop:
+        - vim
+        - htop
+        - curl
+        - wget
+        - git
+
+    - name: Verify hostname file exists
+      stat:
+        path: /etc/hostname
+      register: hostname_file
+      failed_when: not hostname_file.stat.exists
+
+    # ============================================
+    # SECURITY ROLE VERIFICATION
+    # ============================================
+    - name: Verify SSH PermitRootLogin is disabled
+      command: grep -E "^PermitRootLogin" /etc/ssh/sshd_config
+      register: ssh_root
+      changed_when: false
+      failed_when: "'no' not in ssh_root.stdout"
+
+    - name: Verify SSH PasswordAuthentication is disabled
+      command: grep -E "^PasswordAuthentication" /etc/ssh/sshd_config
+      register: ssh_passwd
+      changed_when: false
+      failed_when: "'no' not in ssh_passwd.stdout"
+
+    - name: Verify SSH PubkeyAuthentication is enabled
+      command: grep -E "^PubkeyAuthentication" /etc/ssh/sshd_config
+      register: ssh_pubkey
+      changed_when: false
+      failed_when: "'yes' not in ssh_pubkey.stdout"
+
+    - name: Verify UFW is installed
+      package:
+        name: ufw
+        state: present
+      check_mode: yes
+      register: ufw_pkg
+      failed_when: ufw_pkg.changed
+
+    - name: Verify fail2ban is installed
+      package:
+        name: fail2ban
+        state: present
+      check_mode: yes
+      register: fail2ban_pkg
+      failed_when: fail2ban_pkg.changed
+
+    - name: Verify fail2ban service is enabled
+      service:
+        name: fail2ban
+        enabled: yes
+      check_mode: yes
+      register: fail2ban_svc
+      failed_when: fail2ban_svc.changed
+
+    - name: Verify unattended-upgrades is installed
+      package:
+        name: unattended-upgrades
+        state: present
+      check_mode: yes
+      register: unattended_pkg
+      failed_when: unattended_pkg.changed
+
+    # ============================================
+    # UPDATES ROLE VERIFICATION
+    # ============================================
+    - name: Verify apt cache is recent (updated within last hour)
+      stat:
+        path: /var/cache/apt/pkgcache.bin
+      register: apt_cache
+      failed_when: >
+        not apt_cache.stat.exists or
+        (ansible_date_time.epoch | int - apt_cache.stat.mtime) > 3600
+
+    - name: Verify no broken packages
+      command: dpkg --audit
+      register: dpkg_audit
+      changed_when: false
+      failed_when: dpkg_audit.stdout | length > 0
+
+    # ============================================
+    # CROSS-ROLE INTEGRATION VERIFICATION
+    # ============================================
+    - name: Verify sysctl security parameters are active
+      command: sysctl net.ipv4.tcp_syncookies
+      register: sysctl_syncookies
+      changed_when: false
+      failed_when: "'= 1' not in sysctl_syncookies.stdout"
+
+    - name: Verify SSH service is running
+      service:
+        name: ssh
+        state: started
+      check_mode: yes
+      register: ssh_service
+      failed_when: ssh_service.changed
+
+    - name: Display verification summary
+      debug:
+        msg: "All bootstrap integration verification tests passed successfully!"

@@ -1,0 +1,40 @@
+---
+# Converge: Run SMB share role with different UIDs/GIDs than prepare
+# The role should detect the mismatch and recreate users/groups with correct IDs
+- name: Converge - Apply SMB share role with correct UIDs
+  hosts: all
+  become: true
+  gather_facts: true
+
+  vars:
+    smb_workgroup: "TESTGROUP"
+    smb_server_string: "UID Mismatch Test Server"
+    smb_map_to_guest: "never"
+    ufw_enabled: false
+    vault_smb_passwords:
+      conflict_share: "ConflictPass123!"
+      wrong_share: "WrongPass456!"
+    smb_shares:
+      - name: "conflict_share"
+        path: "/srv/samba/conflict"
+        user: "smbconflict"
+        group: "smbconflict"
+        uid: 4001
+        gid: 4001
+        permission: "rw"
+        comment: "Conflict Test Share"
+        browseable: "yes"
+        guest_ok: "no"
+      - name: "wrong_share"
+        path: "/srv/samba/wrong"
+        user: "smbwrong"
+        group: "smbwrong"
+        uid: 4002
+        gid: 4002
+        permission: "ro"
+        comment: "Wrong ID Test Share"
+        browseable: "yes"
+        guest_ok: "no"
+
+  roles:
+    - role: smb_share

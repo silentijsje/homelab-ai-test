@@ -1,0 +1,55 @@
+---
+# Prepare scenario: Create users/groups with WRONG UIDs/GIDs
+# This simulates a situation where users/groups exist but with incorrect IDs
+- name: Prepare - Create users/groups with wrong UIDs/GIDs
+  hosts: all
+  become: true
+  gather_facts: false
+
+  tasks:
+    - name: Create conflicting group with wrong GID
+      group:
+        name: smbconflict
+        gid: 9001
+        state: present
+
+    - name: Create conflicting user with wrong UID
+      user:
+        name: smbconflict
+        uid: 9001
+        group: smbconflict
+        shell: /bin/bash
+        create_home: yes
+        state: present
+
+    - name: Create conflicting group 2 with wrong GID
+      group:
+        name: smbwrong
+        gid: 9002
+        state: present
+
+    - name: Create conflicting user 2 with wrong UID
+      user:
+        name: smbwrong
+        uid: 9002
+        group: smbwrong
+        shell: /bin/bash
+        create_home: yes
+        state: present
+
+    - name: Create some files owned by conflicting users
+      file:
+        path: "/tmp/conflict_test_{{ item }}"
+        state: touch
+        owner: smbconflict
+        group: smbconflict
+      loop:
+        - file1
+        - file2
+
+    - name: Display preparation info
+      debug:
+        msg: |
+          Prepared conflicting users/groups:
+          - smbconflict: UID=9001, GID=9001 (should become UID=4001, GID=4001)
+          - smbwrong: UID=9002, GID=9002 (should become UID=4002, GID=4002)

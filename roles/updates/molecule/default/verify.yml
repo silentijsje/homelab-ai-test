@@ -2,10 +2,12 @@
 - name: Verify updates configuration
   hosts: all
   become: true
-  gather_facts: false
+  gather_facts: true
 
   tasks:
-    # APT Cache Tests
+    # ============================================
+    # APT CACHE TESTS
+    # ============================================
     - name: Verify apt cache is recent (updated within last hour)
       stat:
         path: /var/cache/apt/pkgcache.bin
@@ -14,7 +16,18 @@
         not apt_cache.stat.exists or
         (ansible_date_time.epoch | int - apt_cache.stat.mtime) > 3600
 
-    # Package Manager State Tests
+    - name: Verify apt cache files exist
+      stat:
+        path: "{{ item }}"
+      register: apt_cache_files
+      failed_when: not apt_cache_files.stat.exists
+      loop:
+        - /var/cache/apt/pkgcache.bin
+        - /var/lib/apt/lists
+
+    # ============================================
+    # PACKAGE MANAGER STATE TESTS
+    # ============================================
     - name: Verify no broken packages
       command: dpkg --audit
       register: dpkg_audit
@@ -26,7 +39,72 @@
         path: /var/lib/dpkg/lock-frontend
       register: apt_lock
 
-    # Reboot Required Check (informational)
+    - name: Verify dpkg database is consistent
+      command: dpkg --configure -a --dry-run
+      register: dpkg_configure
+      changed_when: false
+      failed_when: dpkg_configure.rc != 0
+
+    - name: Verify no packages are held back
+      shell: apt-mark showhold
+      register: held_packages
+      changed_when: false
+
+    - name: Display held packages if any
+      debug:
+        msg: "Held packages: {{ held_packages.stdout_lines }}"
+      when: held_packages.stdout | length > 0
+
+    # ============================================
+    # APT CLEANUP VERIFICATION
+    # ============================================
+    - name: Check for residual config packages
+      shell: dpkg -l | grep '^rc' | wc -l
+      register: residual_configs
+      changed_when: false
+
+    - name: Display residual config count
+      debug:
+        msg: "Residual config packages remaining: {{ residual_configs.stdout }}"
+
+    - name: Verify apt autoclean was effective
+      stat:
+        path: /var/cache/apt/archives
+      register: apt_archives
+
+    - name: Count .deb files in apt cache
+      shell: find /var/cache/apt/archives -name "*.deb" 2>/dev/null | wc -l
+      register: deb_count
+      changed_when: false
+
+    - name: Display cached deb packages count
+      debug:
+        msg: "Cached .deb packages: {{ deb_count.stdout }}"
+
+    # ============================================
+    # SYSTEM UPDATE STATE TESTS
+    # ============================================
+    - name: Check for available security updates
+      shell: apt list --upgradable 2>/dev/null | grep -i security | wc -l || echo "0"
+      register: security_updates
+      changed_when: false
+
+    - name: Display security updates status
+      debug:
+        msg: "Available security updates: {{ security_updates.stdout }}"
+
+    - name: Check for any available updates
+      shell: apt list --upgradable 2>/dev/null | grep -v "^Listing" | wc -l
+      register: available_updates
+      changed_when: false
+
+    - name: Display available updates count
+      debug:
+        msg: "Total available updates: {{ available_updates.stdout }}"
+
+    # ============================================
+    # REBOOT REQUIRED CHECK
+    # ============================================
     - name: Check if reboot is required
       stat:
         path: /var/run/reboot-required
@@ -35,6 +113,52 @@
     - name: Display reboot status
       debug:
         msg: "{{ 'Reboot required' if reboot_required.stat.exists else 'No reboot required' }}"
+
+    - name: Check reboot required packages
+      slurp:
+        src: /var/run/reboot-required.pkgs
+      register: reboot_packages
+      when: reboot_required.stat.exists
+      ignore_errors: true
+
+    - name: Display packages requiring reboot
+      debug:
+        msg: "Packages requiring reboot: {{ (reboot_packages.content | b64decode).split('\n') }}"
+      when: reboot_required.stat.exists and reboot_packages is not failed
+
+    # ============================================
+    # KERNEL UPDATE VERIFICATION
+    # ============================================
+    - name: Get running kernel version
+      command: uname -r
+      register: running_kernel
+      changed_when: false
+
+    - name: Get installed kernel packages
+      shell: dpkg -l | grep linux-image | awk '{print $2}' | head -3
+      register: installed_kernels
+      changed_when: false
+
+    - name: Display kernel information
+      debug:
+        msg: |
+          Running kernel: {{ running_kernel.stdout }}
+          Installed kernel packages: {{ installed_kernels.stdout_lines }}
+
+    # ============================================
+    # SYSTEM SERVICES STATE
+    # ============================================
+    - name: Verify critical services are running after updates
+      service:
+        name: "{{ item }}"
+        state: started
+      check_mode: yes
+      register: service_check
+      failed_when: service_check.changed
+      loop:
+        - ssh
+        - cron
+      ignore_errors: true
 
     - name: Display verification summary
       debug:

@@ -1,0 +1,164 @@
+---
+# Verify: Ensure UID/GID mismatch was corrected
+- name: Verify UID/GID mismatch correction
+  hosts: all
+  become: true
+  gather_facts: false
+
+  tasks:
+    # ============================================
+    # USER/GROUP CORRECTION VERIFICATION
+    # ============================================
+    - name: Verify smbconflict user has correct UID (4001)
+      getent:
+        database: passwd
+        key: smbconflict
+      register: smbconflict_user
+
+    - name: Assert smbconflict user has correct UID
+      assert:
+        that:
+          - smbconflict_user.ansible_facts.getent_passwd.smbconflict[1] == "4001"
+        fail_msg: "smbconflict user UID mismatch, expected 4001"
+        success_msg: "smbconflict user correctly has UID 4001"
+
+    - name: Verify smbconflict group has correct GID (4001)
+      getent:
+        database: group
+        key: smbconflict
+      register: smbconflict_group
+
+    - name: Assert smbconflict group has correct GID
+      assert:
+        that:
+          - smbconflict_group.ansible_facts.getent_group.smbconflict[1] == "4001"
+        fail_msg: "smbconflict group GID mismatch, expected 4001"
+        success_msg: "smbconflict group correctly has GID 4001"
+
+    - name: Verify smbwrong user has correct UID (4002)
+      getent:
+        database: passwd
+        key: smbwrong
+      register: smbwrong_user
+
+    - name: Assert smbwrong user has correct UID
+      assert:
+        that:
+          - smbwrong_user.ansible_facts.getent_passwd.smbwrong[1] == "4002"
+        fail_msg: "smbwrong user UID is {{ smbwrong_user.ansible_facts.getent_passwd.smbwrong[1] }}, expected 4002"
+        success_msg: "smbwrong user correctly has UID 4002"
+
+    - name: Verify smbwrong group has correct GID (4002)
+      getent:
+        database: group
+        key: smbwrong
+      register: smbwrong_group
+
+    - name: Assert smbwrong group has correct GID
+      assert:
+        that:
+          - smbwrong_group.ansible_facts.getent_group.smbwrong[1] == "4002"
+        fail_msg: "smbwrong group GID is {{ smbwrong_group.ansible_facts.getent_group.smbwrong[1] }}, expected 4002"
+        success_msg: "smbwrong group correctly has GID 4002"
+
+    # ============================================
+    # USER SHELL VERIFICATION (nologin)
+    # ============================================
+    - name: Verify smbconflict user has nologin shell
+      assert:
+        that:
+          - "'/usr/sbin/nologin' in smbconflict_user.ansible_facts.getent_passwd.smbconflict[5]"
+        fail_msg: "smbconflict user does not have nologin shell"
+        success_msg: "smbconflict user correctly has nologin shell"
+
+    - name: Verify smbwrong user has nologin shell
+      assert:
+        that:
+          - "'/usr/sbin/nologin' in smbwrong_user.ansible_facts.getent_passwd.smbwrong[5]"
+        fail_msg: "smbwrong user does not have nologin shell"
+        success_msg: "smbwrong user correctly has nologin shell"
+
+    # ============================================
+    # SHARE DIRECTORY VERIFICATION
+    # ============================================
+    - name: Verify conflict share directory exists
+      stat:
+        path: /srv/samba/conflict
+      register: conflict_dir
+      failed_when: not conflict_dir.stat.exists or not conflict_dir.stat.isdir
+
+    - name: Verify conflict directory has correct ownership
+      assert:
+        that:
+          - conflict_dir.stat.uid == 4001
+          - conflict_dir.stat.gid == 4001
+        fail_msg: "conflict directory ownership incorrect"
+        success_msg: "conflict directory has correct ownership (4001:4001)"
+
+    - name: Verify wrong share directory exists
+      stat:
+        path: /srv/samba/wrong
+      register: wrong_dir
+      failed_when: not wrong_dir.stat.exists or not wrong_dir.stat.isdir
+
+    - name: Verify wrong directory has correct ownership
+      assert:
+        that:
+          - wrong_dir.stat.uid == 4002
+          - wrong_dir.stat.gid == 4002
+        fail_msg: "wrong directory ownership incorrect: uid={{ wrong_dir.stat.uid }}, gid={{ wrong_dir.stat.gid }}"
+        success_msg: "wrong directory has correct ownership (4002:4002)"
+
+    # ============================================
+    # SAMBA CONFIGURATION VERIFICATION
+    # ============================================
+    - name: Verify smb.conf is valid
+      command: testparm -s /etc/samba/smb.conf
+      register: testparm_result
+      changed_when: false
+      failed_when: testparm_result.rc != 0
+
+    - name: Read smb.conf content
+      slurp:
+        src: /etc/samba/smb.conf
+      register: smb_conf_content
+
+    - name: Decode smb.conf content
+      set_fact:
+        smb_conf_decoded: "{{ smb_conf_content.content | b64decode }}"
+
+    - name: Verify conflict_share section exists
+      assert:
+        that:
+          - "'[conflict_share]' in smb_conf_decoded"
+        fail_msg: "conflict_share section not found in smb.conf"
+
+    - name: Verify wrong_share section exists
+      assert:
+        that:
+          - "'[wrong_share]' in smb_conf_decoded"
+        fail_msg: "wrong_share section not found in smb.conf"
+
+    # ============================================
+    # SAMBA USER VERIFICATION
+    # ============================================
+    - name: Verify smbconflict is a valid Samba user
+      command: pdbedit -L
+      register: pdbedit_list
+      changed_when: false
+      failed_when: "'smbconflict' not in pdbedit_list.stdout"
+
+    - name: Verify smbwrong is a valid Samba user
+      command: pdbedit -L
+      register: pdbedit_list_wrong
+      changed_when: false
+      failed_when: "'smbwrong' not in pdbedit_list_wrong.stdout"
+
+    - name: Display verification summary
+      debug:
+        msg: |
+          UID/GID mismatch edge case tests passed!
+          - smbconflict: Corrected from 9001:9001 to 4001:4001
+          - smbwrong: Corrected from 9002:9002 to 4002:4002
+          - All share directories created with correct ownership
+          - All Samba users configured correctly

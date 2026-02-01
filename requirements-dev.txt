@@ -1,9 +1,0 @@
-# Development and testing dependencies
-# Pin ansible to <2.19 to avoid compatibility issues with ansible-lint
-ansible>=2.16.0,<2.19.0
-ansible-lint>=6.22.0,<7.0.0
-yamllint>=1.33.0
-molecule>=6.0.0
-molecule-plugins[docker]>=23.5.0
-pytest>=7.4.0
-pytest-testinfra>=10.0.0
